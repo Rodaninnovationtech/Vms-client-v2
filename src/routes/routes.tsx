@@ -4,7 +4,7 @@ import ProtectedRoute from "@/routes/ProtectedRoute";
 
 import { Dashboard } from "@/pages/Dashboard";
 import { Visitor } from "@/pages/Visitor";
-import { PreRegistration } from "@/pages/PreRegistration";
+import { PreRegistration, BulkUploads  } from "@/pages/PreRegistration";
 import { Approval } from "@/pages/Approval";
 import { Ban } from "@/pages/Ban";
 import { KeyManagement, PassManagement, BulkUpload  } from "@/pages/PropertyManagement";
@@ -14,6 +14,7 @@ import {
   CategoryCreation,
   SiteCreation,
   TenantCreation,
+  BulkUploadTenant,
   RoleCreation,
   RolePermission,
   UserCreation,
@@ -55,6 +56,14 @@ export const appRoutes: AppRoute[] = [
     element: (
       <ProtectedRoute>
         <PreRegistration />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: "/pre-registration/bulk-uploads",
+    element: (
+      <ProtectedRoute>
+        <BulkUploads />
       </ProtectedRoute>
     ),
   },
@@ -145,6 +154,15 @@ export const appRoutes: AppRoute[] = [
     element: (
       <ProtectedRoute>
         <TenantCreation />
+      </ProtectedRoute>
+    ),
+  },
+
+  {
+    path: "/system-config/tenant/bulk-upload",
+    element: (
+      <ProtectedRoute>
+        <BulkUploadTenant />
       </ProtectedRoute>
     ),
   },

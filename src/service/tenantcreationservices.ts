@@ -75,10 +75,21 @@ export const tenantService = {
     return response.data;
   },
 
-  create: async (payload: TenantPayload): Promise<ApiResponse<TenantRecord>> => {
-    const response = await interceptor.post<ApiResponse<TenantRecord>>(
+  // create: async (payload: TenantPayload): Promise<ApiResponse<TenantRecord>> => {
+  //   const response = await interceptor.post<ApiResponse<TenantRecord>>(
+  //     URLs.tenant.create,
+  //     payload
+  //   );
+  //   return response.data;
+  // },
+    // Always sends an array. A single object is wrapped, so the Add Tenant modal still works.
+  create: async (
+    payload: TenantPayload | TenantPayload[]
+  ): Promise<ApiResponse<TenantRecord[]>> => {
+    const body = Array.isArray(payload) ? payload : [payload];
+    const response = await interceptor.post<ApiResponse<TenantRecord[]>>(
       URLs.tenant.create,
-      payload
+      body
     );
     return response.data;
   },

@@ -9,3 +9,4 @@ export { default as UserCreation } from "./UserCreation";
 export { default as IdentityTypeCreation } from "./IdentityTypeCreation";
 export { default as VisitorTypeCreation } from "./VisitorTypeCreation";
 export { default as TenantNotification } from "./TenantNotification";
+export { default as BulkUploadTenant } from "./Bulkuploadtenant";

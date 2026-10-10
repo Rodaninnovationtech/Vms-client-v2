@@ -2,24 +2,13 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { ArrowLeft, Download, UploadCloud, FileSpreadsheet, X, CheckCircle2 } from "lucide-react";
 import { Card, PageHeader, Button, Badge } from "@/components/ui";
-import { downloadKeyTemplate, downloadPassTemplate } from "@/utils/excelTemplates";
+import { downloadTenantTemplate } from "@/utils/excelTemplates";
 import { userService } from "@/service/usercreationservices";
 import type { SiteDropdownItem } from "@/service/usercreationservices";
 import { userStorage } from "@/utils/storage";
-import { keyService } from "@/service/keycreationservices";
-import type { KeyStatus } from "@/service/keycreationservices";
-import { passService } from "@/service/passcreationservices";
-import type { PassStatus } from "@/service/passcreationservices";
-import { visitorTypeService } from "@/service/visitortypeservice";
-import type { VisitorTypeRecord } from "@/service/visitortypeservice";
+import { tenantService } from "@/service/tenantcreationservices";
 
-type BulkUploadType = "key" | "pass";
-
-interface BulkUploadProps {
-  type: BulkUploadType;
-}
-
-interface SubsiteItem {
+interface SiteItem {
   id?: number;
   guid: string;
   site_code?: string;
@@ -28,54 +17,44 @@ interface SubsiteItem {
 
 interface StoredUser {
   is_super_admin?: boolean;
-  site_detail?: SubsiteItem | null;
+  site_detail?: SiteItem | null;
 }
 
-// Label used in error messages / the error modal for the "no" field — keeps
-// Key and Pass on one code path even though their field names differ.
-const fieldConfig: Record<BulkUploadType, { noLabel: string; nameLabel: string }> = {
-  key: { noLabel: "Key No", nameLabel: "Key Name" },
-  pass: { noLabel: "Pass No", nameLabel: "Pass Name" },
-};
+const BACK_PATH = "/system-config/tenant";
 
-const config: Record<
-  BulkUploadType,
-  {
-    title: string;
-    backPath: string;
-    backLabel: string;
-    headers: string[];
-    download: () => Promise<void>;
-  }
-> = {
-  key: {
-    title: "Key",
-    backPath: "/property-management/key",
-    backLabel: "Back to Key",
-    headers: ["S.No", "Key No", "Key Name"],
-    download: downloadKeyTemplate,
-  },
-  pass: {
-    title: "Pass",
-    backPath: "/property-management/pass",
-    backLabel: "Back to Pass",
-    // Visitor Type is no longer a column — it's picked once per upload via
-    // the dropdown below and applied to every row.
-    headers: ["S.No", "Pass No", "Pass Name"],
-    download: downloadPassTemplate,
-  },
-};
+// Must match the template exactly (see downloadTenantTemplate)
+const HEADERS = [
+  "S.No",
+  "First Name",
+  "Last Name",
+  "Contact",
+  "Email",
+  "Tenant Location Name",
+  "Block",
+  "Floor",
+  "Unit",
+];
 
 const fieldClass =
   "w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-primary-200 disabled:opacity-60";
 
-const BulkUpload = ({ type }: BulkUploadProps) => {
+// Excel cells can be numbers, hyperlinks (emails!), rich text, formulas...
+const cellToString = (v: any): string => {
+  if (v == null) return "";
+  if (typeof v === "object") {
+    if (Array.isArray(v.richText)) return v.richText.map((t: any) => t.text).join("").trim();
+    if (v.text != null) return String(v.text).trim(); // hyperlink cell
+    if (v.result != null) return String(v.result).trim(); // formula cell
+    if (v instanceof Date) return v.toISOString();
+  }
+  return String(v).trim();
+};
+
+const BulkUploadTenant = () => {
   const navigate = useNavigate();
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const cfg = config[type];
-  const fields = fieldConfig[type];
 
-  // ----- logged-in user / site scope (same pattern as KeyCreation) -----
+  // ----- logged-in user / site scope (same pattern as TenantCreation) -----
   const [storedUser] = useState<StoredUser | null>(() => userStorage.getUser<StoredUser>());
   const isSuperAdmin = storedUser?.is_super_admin === true;
   const ownSite = storedUser?.site_detail ?? null;
@@ -88,7 +67,7 @@ const BulkUpload = ({ type }: BulkUploadProps) => {
   const errorCount = Object.keys(rowErrors).length;
 
   useEffect(() => {
-    if (!isSuperAdmin) return; // non-admins are scoped to their own site, no API call needed
+    if (!isSuperAdmin) return;
     let cancelled = false;
 
     (async () => {
@@ -108,8 +87,7 @@ const BulkUpload = ({ type }: BulkUploadProps) => {
     };
   }, [isSuperAdmin]);
 
-  // Sites offered for bulk-upload: all sites for admins, only their own
-  // site for everyone else — same rule as the Issue/Edit Key modal.
+  // Super admin = every site, others = only their own site
   const siteOptions = useMemo(
     () =>
       isSuperAdmin
@@ -125,43 +103,9 @@ const BulkUpload = ({ type }: BulkUploadProps) => {
 
   const [siteGuid, setSiteGuid] = useState<string>("");
 
-  // Non-admins only ever have one choice — preselect it automatically.
   useEffect(() => {
     if (!isSuperAdmin && ownSite?.guid) setSiteGuid(ownSite.guid);
   }, [isSuperAdmin, ownSite]);
-
-  // ----- visitor type dropdown (Pass upload only) -----
-  // One visitor type is picked per upload and applied to every row, the
-  // same way Issue Pass picks a single visitor type per pass.
-  const [visitorTypes, setVisitorTypes] = useState<VisitorTypeRecord[]>([]);
-  const [isLoadingVisitorTypes, setIsLoadingVisitorTypes] = useState(type === "pass");
-  const [visitorTypeGuid, setVisitorTypeGuid] = useState<string>("");
-
-  useEffect(() => {
-    if (type !== "pass") return;
-    let cancelled = false;
-
-    (async () => {
-      setIsLoadingVisitorTypes(true);
-      try {
-        const res = await visitorTypeService.list(1, 100, "");
-        if (!cancelled && res.success && res.data) {
-          setVisitorTypes((res.data.results ?? []).filter((v) => v.is_active !== false));
-        }
-      } finally {
-        if (!cancelled) setIsLoadingVisitorTypes(false);
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [type]);
-
-  const visitorTypeOptions = useMemo(
-    () => visitorTypes.map((v) => ({ label: v.name, value: v.guid })),
-    [visitorTypes]
-  );
 
   // ----- file upload state -----
   const [fileName, setFileName] = useState<string | null>(null);
@@ -189,7 +133,9 @@ const BulkUpload = ({ type }: BulkUploadProps) => {
       let headerRow: string[] = [];
 
       sheet.eachRow((row, rowNumber) => {
-        const values = (row.values as any[]).slice(1).map((v) => (v == null ? "" : String(v).trim()));
+        const raw = (row.values as any[]).slice(1);
+        // make sure every row has all columns, even if trailing cells are empty
+        const values = HEADERS.map((_, i) => cellToString(raw[i]));
         if (rowNumber === 1) {
           headerRow = values;
           return;
@@ -198,14 +144,13 @@ const BulkUpload = ({ type }: BulkUploadProps) => {
       });
 
       const normalize = (s: string) => s.toLowerCase().replace(/\s+/g, "");
-      const expected = cfg.headers.map(normalize);
+      const expected = HEADERS.map(normalize);
       const actual = headerRow.map(normalize);
-      const headersMatch =
-        expected.length === actual.length && expected.every((h, i) => h === actual[i]);
+      const headersMatch = expected.every((h, i) => h === actual[i]);
 
       if (!headersMatch) {
         setError(
-          `This file doesn't match the ${cfg.title} template. Please use the "Download ${cfg.title} Template" button above.`
+          `This file doesn't match the Tenant template. Please use the "Download Tenant Template" button above.`
         );
         return;
       }
@@ -236,8 +181,7 @@ const BulkUpload = ({ type }: BulkUploadProps) => {
       .join(" ");
   };
 
-  // columns for both Key and Pass are [S.No, <No>, <Name>], so row[1]/row[2]
-  // line up either way.
+  // columns: [S.No, First Name, Last Name, Contact, Email, Tenant Location Name, Block, Floor, Unit]
   const submitRows = async (rowsToSend: string[][]) => {
     setError("");
     setRowErrors({});
@@ -247,66 +191,44 @@ const BulkUpload = ({ type }: BulkUploadProps) => {
       return;
     }
 
-    if (type === "pass" && !visitorTypeGuid) {
-      setError("Please select a visitor type before uploading.");
-      return;
-    }
-
     if (rowsToSend.length === 0) {
       setError("No rows left to upload.");
       return;
     }
 
-    // ----- build + validate payload for the active type -----
-    let apiCall: () => Promise<{ success: boolean; message: string; errors?: unknown }>;
+    const payload = rowsToSend.map((r) => ({
+      first_name: (r[1] || "").trim(),
+      last_name: (r[2] || "").trim(),
+      contact: (r[3] || "").trim(),
+      email: (r[4] || "").trim(),
+      tenant_name: (r[5] || "").trim(),
+      block: (r[6] || "").trim(),
+      floor: (r[7] || "").trim(),
+      unit: (r[8] || "").trim(),
+      site: siteGuid,
+    }));
 
-    if (type === "key") {
-      const payload = rowsToSend.map((r) => ({
-        key_no: (r[1] || "").trim(),
-        key_name: (r[2] || "").trim(),
-        site: siteGuid,
-        status: "Available" as KeyStatus,
-      }));
-
-      for (let i = 0; i < payload.length; i++) {
-        const p = payload[i];
-        if (!p.key_no) return setError(`Row ${i + 1}: Key No is required`);
-        if (!p.key_name) return setError(`Row ${i + 1}: Key Name is required`);
-        if (p.key_no.length > 50) return setError(`Row ${i + 1}: Key No must be 50 characters or fewer`);
-        if (p.key_name.length > 150)
-          return setError(`Row ${i + 1}: Key Name must be 150 characters or fewer`);
-      }
-
-      apiCall = () => keyService.create(payload);
-    } else {
-      const payload = rowsToSend.map((r) => ({
-        pass_no: (r[1] || "").trim(),
-        pass_name: (r[2] || "").trim(),
-        site: siteGuid,
-        visitor_type: visitorTypeGuid,
-        status: "Active" as PassStatus,
-      }));
-
-      for (let i = 0; i < payload.length; i++) {
-        const p = payload[i];
-        if (!p.pass_no) return setError(`Row ${i + 1}: Pass No is required`);
-        if (!p.pass_name) return setError(`Row ${i + 1}: Pass Name is required`);
-        if (p.pass_no.length > 50) return setError(`Row ${i + 1}: Pass No must be 50 characters or fewer`);
-        if (p.pass_name.length > 150)
-          return setError(`Row ${i + 1}: Pass Name must be 150 characters or fewer`);
-      }
-
-      apiCall = () => passService.create(payload);
+    for (let i = 0; i < payload.length; i++) {
+      const p = payload[i];
+      if (!p.first_name) return setError(`Row ${i + 1}: First Name is required`);
+      if (!p.last_name) return setError(`Row ${i + 1}: Last Name is required`);
+      if (!p.contact) return setError(`Row ${i + 1}: Contact is required`);
+      if (!p.email) return setError(`Row ${i + 1}: Email is required`);
+      if (!/^\S+@\S+\.\S+$/.test(p.email)) return setError(`Row ${i + 1}: Enter a valid email`);
+      if (!p.tenant_name) return setError(`Row ${i + 1}: Tenant Location Name is required`);
+      if (!p.block) return setError(`Row ${i + 1}: Block is required`);
+      if (!p.floor) return setError(`Row ${i + 1}: Floor is required`);
+      if (!p.unit) return setError(`Row ${i + 1}: Unit is required`);
     }
 
     setIsSubmitting(true);
     try {
-      const res = await apiCall();
-
+      // NOTE: backend must accept an array (same as keyService / passService).
+    const res = await tenantService.create(payload);
       if (!res.success) {
         const list = res.errors as unknown;
 
-        // per-row errors from the backend: [{row, key_no|pass_no, message}]
+        // per-row errors from the backend: [{row, message}]
         if (
           Array.isArray(list) &&
           list.length > 0 &&
@@ -326,6 +248,30 @@ const BulkUpload = ({ type }: BulkUploadProps) => {
       }
 
       setUploaded(true);
+    // } catch (err: any) {
+    //   const data = err?.response?.data;
+    //   setError(flattenErrors(data?.errors) || data?.message || "Upload failed. Please try again.");
+    // } finally {
+        } catch (err: any) {
+      const data = err?.response?.data;
+      const list = data?.errors as unknown;
+
+      // per-row errors from the backend: [{row, message}]
+      if (
+        Array.isArray(list) &&
+        list.length > 0 &&
+        list.every((e: any) => e && typeof e.row === "number")
+      ) {
+        const map: Record<number, string> = {};
+        list.forEach((e: { row: number; message: string }) => {
+          map[e.row - 1] = e.message;
+        });
+        setRowErrors(map);
+        setShowErrorModal(true);
+        return;
+      }
+
+      setError(flattenErrors(data?.errors) || data?.message || "Upload failed. Please try again.");
     } finally {
       setIsSubmitting(false);
     }
@@ -351,41 +297,40 @@ const BulkUpload = ({ type }: BulkUploadProps) => {
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
-  const dropzoneDisabled = !siteGuid || (type === "pass" && !visitorTypeGuid);
+  const dropzoneDisabled = !siteGuid;
 
   return (
     <div>
       <button
-        onClick={() => navigate(cfg.backPath)}
+        onClick={() => navigate(BACK_PATH)}
         className="flex items-center gap-1.5 text-sm text-slate-500 hover:text-primary-700 mb-3"
       >
         <ArrowLeft size={15} />
-        {cfg.backLabel}
+        Back to Tenant
       </button>
 
       <PageHeader
-        title={`Bulk Upload — ${cfg.title}`}
-        description={`Upload multiple ${cfg.title.toLowerCase()} records at once using the Excel template.`}
+        title="Bulk Upload — Tenant"
+        description="Upload multiple tenant records at once using the Excel template."
       />
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         <Card title="Step 1 — Download Template" className="lg:col-span-1 h-fit">
           <p className="text-sm text-slate-500 mb-4">
-            Download the Excel template, fill in your {cfg.title.toLowerCase()} details and
-            re-upload it. Columns: {cfg.headers.join(", ")}.
+            Download the Excel template, fill in your tenant details and re-upload it. Columns:{" "}
+            {HEADERS.join(", ")}.
           </p>
           <Button
             variant="outline"
             icon={<Download size={16} />}
             fullWidth
-            onClick={() => cfg.download()}
+            onClick={() => downloadTenantTemplate()}
           >
-            Download {cfg.title} Template
+            Download Tenant Template
           </Button>
         </Card>
 
         <Card title="Step 2 — Upload File" className="lg:col-span-2">
-          {/* Site selector, scoped the same way as Issue Key/Pass's Site field */}
           <div className="mb-4">
             <label className="block text-sm font-medium text-slate-700 mb-1.5">
               Site <span className="text-red-500">*</span>
@@ -396,9 +341,7 @@ const BulkUpload = ({ type }: BulkUploadProps) => {
               disabled={isLoadingSites || (!isSuperAdmin && siteOptions.length <= 1)}
               className={fieldClass}
             >
-              <option value="">
-                {isLoadingSites ? "Loading sites..." : "Select site"}
-              </option>
+              <option value="">{isLoadingSites ? "Loading sites..." : "Select site"}</option>
               {siteOptions.map((o) => (
                 <option key={o.value} value={o.value}>
                   {o.label}
@@ -407,49 +350,20 @@ const BulkUpload = ({ type }: BulkUploadProps) => {
             </select>
           </div>
 
-          {/* Visitor Type selector — Pass upload only. One visitor type is
-              applied to every row in the file. */}
-          {type === "pass" && (
-            <div className="mb-4">
-              <label className="block text-sm font-medium text-slate-700 mb-1.5">
-                Visitor Type <span className="text-red-500">*</span>
-              </label>
-              <select
-                value={visitorTypeGuid}
-                onChange={(e) => setVisitorTypeGuid(e.target.value)}
-                disabled={isLoadingVisitorTypes}
-                className={fieldClass}
-              >
-                <option value="">
-                  {isLoadingVisitorTypes ? "Loading visitor types..." : "Select visitor type"}
-                </option>
-                {visitorTypeOptions.map((o) => (
-                  <option key={o.value} value={o.value}>
-                    {o.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-          )}
-
           {!fileName ? (
             <div
               onDragOver={(e) => !dropzoneDisabled && e.preventDefault()}
               onDrop={(e) => {
                 if (dropzoneDisabled) {
                   e.preventDefault();
-                  setError(
-                    !siteGuid ? "Please select a site first." : "Please select a visitor type first."
-                  );
+                  setError("Please select a site first.");
                   return;
                 }
                 handleDrop(e);
               }}
               onClick={() => {
                 if (dropzoneDisabled) {
-                  setError(
-                    !siteGuid ? "Please select a site first." : "Please select a visitor type first."
-                  );
+                  setError("Please select a site first.");
                   return;
                 }
                 fileInputRef.current?.click();
@@ -491,16 +405,21 @@ const BulkUpload = ({ type }: BulkUploadProps) => {
 
               {rows.length > 0 && (
                 <div className="overflow-x-auto rounded-lg border border-primary-50 mb-4 max-h-64 overflow-y-auto">
-                  <table className="w-full text-sm text-left border-collapse min-w-[420px]">
+                  <table className="w-full text-sm text-left border-collapse min-w-[900px]">
                     <thead className="sticky top-0 bg-primary-50/90">
                       <tr>
-                        {cfg.headers.map((h) => (
-                          <th key={h} className="px-3 py-2 text-xs font-semibold text-primary-800 uppercase">
+                        {HEADERS.map((h) => (
+                          <th
+                            key={h}
+                            className="px-3 py-2 text-xs font-semibold text-primary-800 uppercase whitespace-nowrap"
+                          >
                             {h}
                           </th>
                         ))}
                         {errorCount > 0 && (
-                          <th className="px-3 py-2 text-xs font-semibold text-red-700 uppercase">Error</th>
+                          <th className="px-3 py-2 text-xs font-semibold text-red-700 uppercase">
+                            Error
+                          </th>
                         )}
                       </tr>
                     </thead>
@@ -510,7 +429,7 @@ const BulkUpload = ({ type }: BulkUploadProps) => {
                           key={i}
                           className={`border-t border-slate-100 ${i in rowErrors ? "bg-red-50" : ""}`}
                         >
-                          {cfg.headers.map((_, ci) => (
+                          {HEADERS.map((_, ci) => (
                             <td key={ci} className="px-3 py-2 text-slate-700 whitespace-nowrap">
                               {r[ci] || "-"}
                             </td>
@@ -530,7 +449,7 @@ const BulkUpload = ({ type }: BulkUploadProps) => {
               {uploaded ? (
                 <div className="flex items-center gap-2 text-emerald-700 bg-emerald-50 border border-emerald-100 rounded-lg px-3.5 py-2.5 text-sm">
                   <CheckCircle2 size={16} />
-                  {rows.length} {cfg.title.toLowerCase()} records uploaded successfully.
+                  {rows.length} tenant records uploaded successfully.
                 </div>
               ) : (
                 <div className="flex items-center gap-2">
@@ -538,7 +457,9 @@ const BulkUpload = ({ type }: BulkUploadProps) => {
                     onClick={handleSubmit}
                     disabled={rows.length === 0 || dropzoneDisabled || isSubmitting}
                   >
-                    {isSubmitting ? "Uploading..." : `Upload ${rows.length > 0 ? `${rows.length} Records` : ""}`}
+                    {isSubmitting
+                      ? "Uploading..."
+                      : `Upload ${rows.length > 0 ? `${rows.length} Records` : ""}`}
                   </Button>
 
                   <Button variant="outline" onClick={reset}>
@@ -579,7 +500,8 @@ const BulkUpload = ({ type }: BulkUploadProps) => {
                   key={idx}
                   className="rounded-lg border border-red-100 bg-red-50 px-3 py-2 text-sm text-red-700"
                 >
-                  Row {Number(idx) + 1} ({fields.noLabel} {rows[Number(idx)]?.[1] || "-"}): {msg}
+                  Row {Number(idx) + 1} ({rows[Number(idx)]?.[1] || "-"} {rows[Number(idx)]?.[2] || ""},{" "}
+                  Unit {rows[Number(idx)]?.[8] || "-"}): {msg}
                 </li>
               ))}
             </ul>
@@ -589,7 +511,7 @@ const BulkUpload = ({ type }: BulkUploadProps) => {
                 Close
               </Button>
               <Button onClick={handleRemoveErrorsAndUpload} disabled={rows.length - errorCount === 0}>
-                Remove duplicate data & Upload
+                Remove error rows & Upload
               </Button>
             </div>
           </div>
@@ -599,4 +521,4 @@ const BulkUpload = ({ type }: BulkUploadProps) => {
   );
 };
 
-export default BulkUpload;
+export default BulkUploadTenant;

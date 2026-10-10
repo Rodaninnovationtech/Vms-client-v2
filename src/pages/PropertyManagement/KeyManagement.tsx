@@ -605,7 +605,7 @@ const KeyCreation = () => {
             value: s.guid,
           }))
         : ownSite
-        ? [{ label: `${ownSite.name} (My Site)`, value: ownSite.guid }]
+        ? [{ label: `${ownSite.name} (Primary)`, value: ownSite.guid }]
         : [],
     [isSuperAdmin, allSites, ownSite]
   
@@ -625,8 +625,10 @@ const KeyCreation = () => {
     : siteChoices.map((s) => ({
         label:
           s.guid === ownSite?.guid
-            ? `${s.name} (My Site)`
-            : `${s.name}${s.site_code ? ` (${s.site_code})` : ""}`,
+            // ? `${s.name} (My Site)`
+            // : `${s.name}${s.site_code ? ` (${s.site_code})` : ""}`,
+            ? `${s.name} (Primary)`
+            : `${s.name} (Other)`,
         value: s.guid,
       }));
 

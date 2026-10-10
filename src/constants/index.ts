@@ -110,6 +110,8 @@ export const URLs = {
     passLookup: "/visitors/pass-lookup/",
     preRegApprovedList: "/pre-registrations/approved-list/",
     preRegApprovedCheckIn: "/pre-registrations/approved-check-in/",
+    preRegBulkCheckIn: "/pre-registrations/bulk-check-in/",
+    preRegBulkCheckOut: "/pre-registrations/bulk-check-out/",
   },
   ban: {
     create: "/bans/create/",
@@ -130,9 +132,26 @@ export const URLs = {
   },
   approval: {
     approvers: "/approvals/approvers/",
-    list: "/approvals/list/", // pending only
-    history: "/approvals/history/", // NEW: approved + rejected
-    action: "/approvals/action/", // NEW
+    list: "/approvals/list/", 
+    history: "/approvals/history/", 
+    action: "/approvals/action/", 
+    bulkAction: "/approvals/bulk-action/",
+  },
+
+    report: {
+    list: "/reports/list/",
+  },
+
+  bulkPreRegistration: {
+    validate: "/bulk-pre-registrations/validate/",
+    create: "/bulk-pre-registrations/create/",
+    approvedList: "/bulk-pre-registrations/approved-list/",
+    bulkIds: "/bulk-pre-registrations/bulk-ids/",
+    list: "/bulk-pre-registrations/list/",
+  },
+  dashboard: {
+    summary: "/dashboard/summary/",
+    notCheckedOut: "/dashboard/not-checked-out/",
   },
 };
 

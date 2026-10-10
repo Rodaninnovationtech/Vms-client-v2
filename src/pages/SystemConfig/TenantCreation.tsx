@@ -175,7 +175,8 @@
 
 import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
-import { Plus, Search, Pencil, Trash2, AlertCircle } from "lucide-react";
+import { useNavigate } from "react-router-dom"; 
+import { Plus, Search, Pencil, Trash2, AlertCircle, Upload  } from "lucide-react";
 import {
   Card,
   PageHeader,
@@ -259,6 +260,7 @@ const extractError = (error: any, fallback: string): string => {
 };
 
 const TenantCreation = () => {
+  const navigate = useNavigate();
   // ---------- logged-in user ----------
   const [storedUser] = useState<StoredUser | null>(() =>
     userStorage.getUser<StoredUser>()
@@ -587,9 +589,22 @@ const TenantCreation = () => {
         description="Manage tenants occupying each site."
         actions={
           isReadOnly ? null : (
-            <Button icon={<Plus size={16} />} onClick={openAddModal}>
-              Add Tenant
-            </Button>
+            // <Button icon={<Plus size={16} />} onClick={openAddModal}>
+            //   Add Tenant
+            // </Button>
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    icon={<Upload size={16} />}
+                    onClick={() => navigate("/system-config/tenant/bulk-upload")}
+                  >
+                    Bulk Upload
+                  </Button>
+                  <Button icon={<Plus size={16} />} onClick={openAddModal}>
+                    Add Tenant
+                  </Button>
+                </div>
+
           )
         }
       />

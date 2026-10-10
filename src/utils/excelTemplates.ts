@@ -175,3 +175,34 @@ export const downloadPassTemplate = async () => {
 
   await downloadWorkbook(workbook, "Pass_Bulk_Upload_Template.xlsx");
 };
+
+
+
+/**
+ * Tenant bulk upload template
+ */
+export const downloadTenantTemplate = async () => {
+  const { default: ExcelJS } = await import("exceljs");
+  const workbook = new ExcelJS.Workbook();
+  const sheet = workbook.addWorksheet("Tenant Template");
+
+  sheet.columns = [
+    { header: "S.No", key: "sno", width: 10 },
+    { header: "First Name", key: "firstName", width: 20 },
+    { header: "Last Name", key: "lastName", width: 20 },
+    { header: "Contact", key: "contact", width: 18 },
+    { header: "Email", key: "email", width: 30 },
+    { header: "Tenant Location Name", key: "tenantName", width: 28 },
+    { header: "Block", key: "block", width: 10 },
+    { header: "Floor", key: "floor", width: 10 },
+    { header: "Unit", key: "unit", width: 10 },
+  ];
+
+  styleHeaderRow(sheet.getRow(1));
+
+  for (let i = 1; i <= 20; i++) {
+    sheet.addRow({ sno: i });
+  }
+
+  await downloadWorkbook(workbook, "Tenant_Bulk_Upload_Template.xlsx");
+};

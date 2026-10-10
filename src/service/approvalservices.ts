@@ -60,6 +60,12 @@ interface ApprovalHistoryData {
   summary?: { pending: number; approved: number; rejected: number };
 }
 
+export interface BulkActionResult {
+  bulk_id: string;
+  processed: number;
+  skipped: { guid: string; person_name: string; reason: string }[];
+}
+
 export const approvalService = {
   // pending requests waiting for a decision
   list: async (params: ApprovalListParams): Promise<ApiResponse<ApprovalListData>> => {
@@ -107,6 +113,18 @@ export const approvalService = {
     const response = await interceptor.post<ApiResponse<ApprovalRecord>>(
       URLs.approval.action,
       { guid, action, remark }
+    );
+    return response.data;
+  },
+  // approve / reject every pending request of one bulk upload
+  actBulk: async (
+    bulkId: string,
+    action: "APPROVE" | "REJECT",
+    remark = ""
+  ): Promise<ApiResponse<BulkActionResult>> => {
+    const response = await interceptor.post<ApiResponse<BulkActionResult>>(
+      URLs.approval.bulkAction,
+      { bulk_id: bulkId, action, remark }
     );
     return response.data;
   },

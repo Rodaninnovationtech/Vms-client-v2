@@ -6,6 +6,8 @@ export type PreRegVisitStatus = "" | "Pending" | "Checked In" | "Checked Out";
 
 export interface PreRegApprovedRecord extends VisitRecord {
   can_check_in: boolean;
+  key_name?: string | null;
+  pass_name?: string | null;
 }
 
 export interface PreRegApprovedListParams {
@@ -68,6 +70,28 @@ export const preRegApprovedService = {
     const response = await interceptor.post<ApiResponse<PreRegApprovedRecord>>(
       URLs.visitor.preRegApprovedCheckIn,
       payload
+    );
+    return response.data;
+  },
+
+  bulkCheckIn: async (payload: {
+    bulk_id: string;
+    pass_no?: string;
+    key_no?: string;
+  }): Promise<ApiResponse<{ count: number; bulk_id: string }>> => {
+    const response = await interceptor.post<ApiResponse<{ count: number; bulk_id: string }>>(
+      URLs.visitor.preRegBulkCheckIn,
+      payload
+    );
+    return response.data;
+  },
+
+  bulkCheckOut: async (
+    bulk_id: string
+  ): Promise<ApiResponse<{ count: number; bulk_id: string }>> => {
+    const response = await interceptor.post<ApiResponse<{ count: number; bulk_id: string }>>(
+      URLs.visitor.preRegBulkCheckOut,
+      { bulk_id }
     );
     return response.data;
   },

@@ -29,4 +29,3 @@ src/
 Purple + white, with light-purple (`primary-100`) active/hover highlighting.
 Colors are defined in `tailwind.config.js` under `theme.extend.colors.primary`.
 Breakpoints: `sm` `md` `lg` `xl` `2xl` (Tailwind defaults).
-"# Vms-client-v2" 
